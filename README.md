@@ -68,5 +68,7 @@ by Alexander Holm, licensed under CC BY 3.0.
 
 ## Licence
 
-MIT — free to use, modify, and distribute.
-Note: the Raine Reizo voice bank is non-commercial. This app may not be sold.
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — free to use, modify, and build upon for non-commercial purposes. Credit required.
+Commercial use is not permitted.
+
+Voice samples use the Raine Reizo voicebank by suyu (UtauReizo), non-commercial use only.
