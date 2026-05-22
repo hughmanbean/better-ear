@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/venv/bin/python3 scripts/generate_audio.py)",
+      "Bash(node -e ' *)",
+      "Bash(scripts/venv/bin/python3 -c \"import scipy; print\\(scipy.__version__\\)\")",
+      "Bash(scripts/venv/bin/pip list *)",
+      "Bash(ldconfig -p)",
+      "Bash(dpkg -l)",
+      "Read(//usr/lib/**)",
+      "Bash(scripts/venv/bin/pip show *)",
+      "Bash(scripts/venv/bin/pip install *)",
+      "Bash(scripts/venv/bin/python3 -c ' *)",
+      "Bash(scripts/venv/bin/python3 scripts/generate_piano.py)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+# Node
+app/node_modules/
+app/.expo/
+
+# Android build outputs
+app/android/app/build/
+app/android/build/
+app/android/.gradle/
+
+# Generated audio — regenerate with scripts
+app/assets/audio/*.mp3
+
+# Python
+scripts/venv/
+scripts/__pycache__/
+scripts/temp/
+
+# Large binaries — download/source separately
+scripts/SalC5Light2.sf2
+New/*.wav
+Samples_Processed/
+
+# Sensitive
+*.keystore
+*.jks
+app/android/app/debug.keystore
+
+# OS
+.DS_Store
+*.log
