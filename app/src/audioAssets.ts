@@ -891,7 +891,6 @@ const AUDIO_ASSETS: Record<string, number> = {
   '71_piano': require('../assets/audio/71_piano.mp3'),
   '72_piano': require('../assets/audio/72_piano.mp3'),
   'ride_fast': require('../assets/audio/ride_fast.mp3'),
-  'shepard_rise': require('../assets/audio/shepard_rise.mp3'),
 };
 
 export default AUDIO_ASSETS;
