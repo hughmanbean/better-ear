@@ -17,8 +17,19 @@ scripts/temp/
 
 # Large binaries — download/source separately
 scripts/SalC5Light2.sf2
+scripts/voices/
+app/Salamander_SF2.zip
 New/*.wav
 Samples_Processed/
+Syllable Samples/
+
+# Personal / workspace files
+.claude/
+"Solfege samples.mp3"
+"Solve these problems"
+reminder
+banacos_spec_v1.docx
+top_speed_in_all_keys.pdf
 
 # Sensitive
 *.keystore

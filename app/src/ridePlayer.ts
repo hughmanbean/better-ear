@@ -1,4 +1,5 @@
 import { Audio } from 'expo-av';
+import { PLAY_TIMEOUT_MS } from './AudioEngine';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const CLICK_ASSET = require('../assets/audio/metro_click.wav');
@@ -19,7 +20,8 @@ let prefetched: Audio.Sound | null = null;
 function preFetch(): void {
   Audio.Sound.createAsync(CLICK_ASSET, { volume: 0.22 })
     .then(({ sound }) => {
-      prefetched?.unloadAsync().catch(() => {});
+      if (!rideRunning) { sound.unloadAsync().catch(() => {}); return; }
+      if (prefetched) { prefetched.unloadAsync().catch(() => {}); }
       prefetched = sound;
     })
     .catch(() => {});
@@ -31,17 +33,41 @@ function fireClick(): void {
   preFetch(); // queue the next one immediately
 
   if (s) {
+    let settled = false;
+    const clickFallback = () => {
+      Audio.Sound.createAsync(CLICK_ASSET, { volume: 0.22 })
+        .then(({ sound }) => {
+          setTimeout(() => { sound.unloadAsync().catch(() => {}); }, 2000);
+          sound.playAsync().catch(() => {});
+        })
+        .catch(() => {});
+    };
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      s.unloadAsync().catch(() => {});
+      clickFallback();
+    }, PLAY_TIMEOUT_MS);
     s.playAsync()
-      .then(() => setTimeout(() => s.unloadAsync().catch(() => {}), 2000))
+      .then(() => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        setTimeout(() => { s.unloadAsync().catch(() => {}); }, 2000);
+      })
       .catch(() => {
-        // Oppo released the PREPARED player — shouldPlay fallback
-        Audio.Sound.createAsync(CLICK_ASSET, { volume: 0.22, shouldPlay: true })
-          .then(({ sound }) => setTimeout(() => sound.unloadAsync().catch(() => {}), 2000))
-          .catch(() => {});
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        s.unloadAsync().catch(() => {});
+        clickFallback();
       });
   } else {
-    Audio.Sound.createAsync(CLICK_ASSET, { volume: 0.22, shouldPlay: true })
-      .then(({ sound }) => setTimeout(() => sound.unloadAsync().catch(() => {}), 2000))
+    Audio.Sound.createAsync(CLICK_ASSET, { volume: 0.22 })
+      .then(({ sound }) => {
+        setTimeout(() => { sound.unloadAsync().catch(() => {}); }, 2000);
+        sound.playAsync().catch(() => {});
+      })
       .catch(() => {});
   }
 }
@@ -84,6 +110,8 @@ export function syncRide(): void {
 export function stopRide(): void {
   rideRunning = false;
   if (beatTimer) { clearTimeout(beatTimer); beatTimer = null; }
+  if (prefetched) { prefetched.unloadAsync().catch(() => {}); }
+  prefetched = null;
 }
 
 export function isRideRunning(): boolean { return rideRunning; }

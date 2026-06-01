@@ -148,6 +148,7 @@ export default function SessionScreen({ config, onExit }: Props) {
       />
       <SafeAreaView style={s.root}>
         <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+
         <View style={s.stage}>
           <Animated.Text style={[s.label, { opacity, color }]}>
             {label}

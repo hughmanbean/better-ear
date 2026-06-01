@@ -31,7 +31,6 @@
       "package": "com.betterear.eartrainer"
     },
     "plugins": [
-      "expo-audio",
       "expo-asset"
     ]
   }

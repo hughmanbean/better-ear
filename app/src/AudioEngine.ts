@@ -28,21 +28,34 @@ export interface SessionConfig {
   volume:       0 | 1 | 2;
 }
 
-// Note/cadence volumes at each level, relative to the fixed ride (0.22).
-const NOTE_VOLUMES    = [0.25, 0.5,  0.8 ] as const;
-const CADENCE_VOLUMES = [0.18, 0.35, 0.55] as const;
+// Volumes at each user level, relative to the fixed ride (0.22).
+// Solfege samples are normalized to 0.90 peak; piano files to 0.50 peak,
+// so PIANO_VOLUMES is set ~25% higher to balance perceived loudness.
+const NOTE_VOLUMES    = [0.15, 0.30, 0.50] as const;  // solfège
+const PIANO_VOLUMES   = [0.32, 0.62, 1.00] as const;  // mystery piano notes
+const CADENCE_VOLUMES = [0.22, 0.42, 0.66] as const;  // I–IV–V–I cadence
 
 // Fixed at 80 BPM — must match BEAT_MS in ridePlayer.ts
 const BEAT_MS = 750;
 // Minimum beats between exercises — just enough for audio recovery.
 const MIN_GAP_BEATS = 1;
-// Start loading each note this many beats before it plays. 2 beats = 1.5 s
-// on a freshly-started load, so the sound is always < 2 s old when played.
-const PRELOAD_LEAD_BEATS = 2;
+// Start loading each note this many beats before it plays. 1 beat = 750 ms —
+// keeps the ExoPlayer instance fresh enough that Oppo won't silently reclaim it.
+const PRELOAD_LEAD_BEATS = 1;
 // Unload note sounds 2 s after playback starts (samples are ~1 s).
 const NOTE_UNLOAD_MS = 2000;
 // Cadence is 4 beats = 3000 ms; unload well after it finishes.
 const CADENCE_UNLOAD_MS = 5000;
+// If playAsync() hasn't resolved or rejected within this window, treat it as
+// hung (Oppo/ExoPlayer silent freeze) and immediately start a fallback sound.
+// Must be well under one beat (750 ms) so the fallback lands in time.
+export const PLAY_TIMEOUT_MS = 300;
+// Solfège samples have a slow-attack DiffSinger envelope that causes the
+// loudest part to land slightly after the onset. Fire them this many ms early
+// so the perceived peak aligns with the click.
+// chop_vocoder.py normalises onset position within each clip so all syllables
+// have their energy landing at the same position relative to the clip start.
+const SOLFEGE_LEAD_MS = 100;
 
 export type SessionEvent =
   | { type: 'cadence' }
@@ -96,7 +109,11 @@ export class AudioEngine {
     if (!source) { console.warn(`[CADENCE] No asset for ${key}`); return; }
     try {
       const { sound } = await Audio.Sound.createAsync(source, { volume: CADENCE_VOLUMES[volume] });
-      this.cadenceSound = sound;
+      if (this.stopped) {
+        sound.unloadAsync().catch(() => {});
+      } else {
+        this.cadenceSound = sound;
+      }
     } catch (e) {
       console.warn(`[CADENCE] Preload failed ${key}: ${e}`);
     }
@@ -125,7 +142,7 @@ export class AudioEngine {
     for (const id of this.preloadTimers) clearTimeout(id);
     this.preloadTimers = [];
     for (const sounds of this.preloaded.values()) {
-      for (const s of sounds) s.unloadAsync().catch(() => {});
+      for (const s of sounds) { s.unloadAsync().catch(() => {}); }
     }
     this.preloaded.clear();
   }
@@ -140,15 +157,15 @@ export class AudioEngine {
    * the session ends (_clearPreloaded is called), the resolved sound is
    * discarded immediately rather than leaking into the next session.
    */
-  private _schedulePreload(key: string, source: number, playAtMs: number): void {
+  private _schedulePreload(key: string, source: number, playAtMs: number, volumes: readonly [number, number, number] = NOTE_VOLUMES): void {
     const sid   = this.sessionId;
     const delay = Math.max(0, playAtMs - Date.now() - PRELOAD_LEAD_BEATS * BEAT_MS);
-    const vol = NOTE_VOLUMES[this.volumeLevel];
+    const vol = volumes[this.volumeLevel];
     const id = setTimeout(() => {
       Audio.Sound.createAsync(source, { volume: vol })
         .then(({ sound }) => {
           if (this.sessionId !== sid) {
-            sound.unloadAsync().catch(() => {}); // session ended — discard
+            sound.unloadAsync().catch(() => {});
             return;
           }
           if (!this.preloaded.has(key)) this.preloaded.set(key, []);
@@ -159,21 +176,54 @@ export class AudioEngine {
     this.preloadTimers.push(id);
   }
 
-  private _playPreloaded(key: string, fallbackSrc: number): void {
-    const vol = NOTE_VOLUMES[this.volumeLevel];
+  private _playFallback(src: number, vol: number): void {
+    Audio.Sound.createAsync(src, { volume: vol })
+      .then(({ sound }) => {
+        setTimeout(() => { sound.unloadAsync().catch(() => {}); }, NOTE_UNLOAD_MS);
+        sound.playAsync().catch(() => {});
+      })
+      .catch(() => {});
+  }
+
+  private _playPreloaded(key: string, fallbackSrc: number, volumes: readonly [number, number, number] = NOTE_VOLUMES): void {
+    const vol = volumes[this.volumeLevel];
     const s = this.preloaded.get(key)?.shift();
     if (s) {
+      let settled = false;
+
+      // Fast timeout: if playAsync() hangs past PLAY_TIMEOUT_MS, start the
+      // fallback immediately so it can still land within the beat window.
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        s.unloadAsync().catch(() => {});
+        this._playFallback(fallbackSrc, vol);
+      }, PLAY_TIMEOUT_MS);
+
       s.playAsync()
-        .then(() => setTimeout(() => s.unloadAsync().catch(() => {}), NOTE_UNLOAD_MS))
+        .then(status => {
+          if (settled) return;
+          // Detect silent ExoPlayer release: playAsync resolved but isPlaying=false
+          if (!status.isLoaded || !status.isPlaying) {
+            settled = true;
+            clearTimeout(timeoutId);
+            s.unloadAsync().catch(() => {});
+            this._playFallback(fallbackSrc, vol);
+            return;
+          }
+          settled = true;
+          clearTimeout(timeoutId);
+          setTimeout(() => { s.unloadAsync().catch(() => {}); }, NOTE_UNLOAD_MS);
+        })
         .catch(() => {
-          Audio.Sound.createAsync(fallbackSrc, { volume: vol, shouldPlay: true })
-            .then(({ sound }) => setTimeout(() => sound.unloadAsync().catch(() => {}), NOTE_UNLOAD_MS))
-            .catch(() => {});
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          s.unloadAsync().catch(() => {});
+          this._playFallback(fallbackSrc, vol);
         });
     } else {
-      Audio.Sound.createAsync(fallbackSrc, { volume: vol, shouldPlay: true })
-        .then(({ sound }) => setTimeout(() => sound.unloadAsync().catch(() => {}), NOTE_UNLOAD_MS))
-        .catch(() => {});
+      this._playFallback(fallbackSrc, vol);
     }
   }
 
@@ -189,16 +239,17 @@ export class AudioEngine {
     const key    = `${m}_piano`;
     const source = (AUDIO_ASSETS as Record<string, number>)[key];
     if (!source) return;
-    this._playPreloaded(key, source);
+    this._playPreloaded(key, source, PIANO_VOLUMES);
   }
 
   private playCadence(): void {
     const sound = this.cadenceSound;
     this.cadenceSound = null;
     if (!sound) return;
-    sound.playAsync()
-      .then(() => setTimeout(() => sound.unloadAsync().catch(() => {}), CADENCE_UNLOAD_MS))
-      .catch(() => {});
+    setTimeout(() => { sound.unloadAsync().catch(() => {}); }, CADENCE_UNLOAD_MS);
+    sound.playAsync().catch(() => {
+      sound.unloadAsync().catch(() => {});
+    });
   }
 
   /**
@@ -267,7 +318,7 @@ export class AudioEngine {
       const m   = clampPianoMidi(mysteryMidis[i]);
       const key = `${m}_piano`;
       const src = (AUDIO_ASSETS as Record<string, number>)[key];
-      if (src) this._schedulePreload(key, src, t0 + (6 + i) * BEAT_MS);
+      if (src) this._schedulePreload(key, src, t0 + (6 + i) * BEAT_MS, PIANO_VOLUMES);
     }
     for (let i = 0; i < k - 1; i++) {
       const syllable = getSyllable(mysteryMidis[i], tonicMidi, direction, mode);
@@ -286,8 +337,8 @@ export class AudioEngine {
     const halted = (): boolean => this.stopped;
 
     let b = 0;
-    const onBeat = async (n: number) => {
-      const ms = t0 + n * BEAT_MS - Date.now();
+    const onBeat = async (n: number, leadMs = 0) => {
+      const ms = t0 + n * BEAT_MS - leadMs - Date.now();
       if (ms > 0) await sleep(ms);
     };
 
@@ -329,7 +380,7 @@ export class AudioEngine {
 
     // --- Verification: non-path mysteries ---
     for (let i = 0; i < mysteryMidis.length - 1; i++) {
-      await onBeat(b); if (halted()) return;
+      await onBeat(b, SOLFEGE_LEAD_MS); if (halted()) return;
       const midi     = mysteryMidis[i];
       const syllable = getSyllable(midi, tonicMidi, direction, mode);
       onEvent?.({ type: 'syllable', syllable, midi, phase: 'verification' });
@@ -340,7 +391,7 @@ export class AudioEngine {
     // --- Verification: path to tonic ---
     for (let i = 0; i < path.length; i++) {
       const { midi, syllable } = path[i];
-      await onBeat(b); if (halted()) return;
+      await onBeat(b, SOLFEGE_LEAD_MS); if (halted()) return;
       onEvent?.({ type: 'syllable', syllable, midi, phase: i === 0 ? 'verification' : 'path' });
       this.playSolfegeNote(midi, syllable);
       b++;
