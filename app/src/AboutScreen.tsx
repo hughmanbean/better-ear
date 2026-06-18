@@ -19,8 +19,8 @@ interface Props {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const DONATION_URL = 'https://ko-fi.com/kmccarthy65312';
-const SUYU_URL     = 'https://rainerr.weebly.com/';
+const DONATION_URL  = 'https://ko-fi.com/kmccarthy65312';
+const UTAUFR_URL    = 'https://utaufrance.com/';
 
 export default function AboutScreen({ onBack }: Props) {
   const slideAnim   = useRef(new Animated.Value(SCREEN_WIDTH)).current;
@@ -64,7 +64,7 @@ export default function AboutScreen({ onBack }: Props) {
     return () => anim.stop();
   }, [flashAnim]);
 
-  const handleScroll = (e: any) => {
+  const handleScroll = (e: { nativeEvent: { contentOffset: { y: number } } }) => {
     if (e.nativeEvent.contentOffset.y > 20) {
       Animated.timing(arrowOpacity, { toValue: 0, duration: 250, useNativeDriver: true }).start();
     }
@@ -158,10 +158,20 @@ export default function AboutScreen({ onBack }: Props) {
 
           <View style={s.section}>
             <Text style={s.sectionLabel}>V O I C E</Text>
-            <Text style={s.body}>Raine Reizo</Text>
-            <TouchableOpacity onPress={() => Linking.openURL(SUYU_URL)} hitSlop={8}>
-              <Text style={s.link}>suyu · UtauReizo</Text>
+            <Text style={s.body}>ALYS for DiffSinger</Text>
+            <TouchableOpacity onPress={() => Linking.openURL(UTAUFR_URL)} hitSlop={8}>
+              <Text style={s.link}>utaufrance.com</Text>
             </TouchableOpacity>
+          </View>
+
+          <View style={s.section}>
+            <Text style={s.sectionLabel}>V O I C E  C R E D I T S</Text>
+            <Text style={s.fine}>
+              Voice: Poucet{'\n'}
+              Training: S'pose (imsupposed2){'\n'}
+              QA &amp; logistics: Gyromancy, Hibya, Mim, ALYS team{'\n'}
+              ALYS is a registered trademark of Cyrielle Collignon
+            </Text>
           </View>
 
           <View style={s.section}>
@@ -172,9 +182,9 @@ export default function AboutScreen({ onBack }: Props) {
           <View style={s.section}>
             <Text style={s.sectionLabel}>L I C E N S E</Text>
             <Text style={s.fine}>
-              Voice samples are rendered from the Raine Reizo DiffSinger voicebank
-              by suyu (UtauReizo) and used for non-commercial purposes in accordance
-              with the creator's terms of use.
+              Voice samples are rendered from ALYS for DiffSinger by Utau France,
+              developed in collaboration with the ALYS copyright holders.
+              Used for non-commercial educational purposes.
             </Text>
           </View>
         </ScrollView>

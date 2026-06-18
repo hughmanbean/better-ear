@@ -25,11 +25,17 @@ Syllable Samples/
 
 # Personal / workspace files
 .claude/
-"Solfege samples.mp3"
-"Solve these problems"
+Solfege samples.mp3
+Solve these problems
 reminder
 banacos_spec_v1.docx
 top_speed_in_all_keys.pdf
+
+# Release APK alongside project (local copy only)
+*.apk
+
+# Expo dist bundle
+app/dist/
 
 # Sensitive
 *.keystore

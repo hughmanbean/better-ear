@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useKeepAwake } from 'expo-keep-awake';
 import { AudioEngine, type SessionConfig } from './AudioEngine';
 import { randomMysteryNotes } from './musicTheory';
 import { playTick } from './uiTick';
@@ -26,6 +27,9 @@ const COLORS = {
   verification: '#4ADE80',
   path:         '#60A0FF',
 } as const;
+
+// Primary colours for dim-mode EXIT — cycles R→G→B each appearance to spread OLED sub-pixel wear
+const DIM_COLORS = ['#FF2244', '#22DD55', '#2255FF'] as const;
 
 function shuffled12(): number[] {
   const keys = Array.from({ length: 12 }, (_, i) => 57 + i);
@@ -44,6 +48,41 @@ export default function SessionScreen({ config, onExit }: Props) {
   const [label, setLabel]       = useState('');
   const [color, setColor]       = useState<string>(COLORS.mystery);
   const [showCount, setShowCount] = useState(0);
+  const [dimmed, setDimmed]       = useState(false);
+  const [dimColorIdx, setDimColorIdx] = useState(0);
+  const exitFlicker               = useRef(new Animated.Value(0)).current;
+
+  // Keep the screen on for the entire session — prevents auto-lock during exercise.
+  useKeepAwake();
+
+  // Dim mode cycle: 1s fade in → 4s hold → 1s fade out → 6s black (12s total).
+  // Cycles through R→G→B on each appearance to spread OLED sub-pixel wear.
+  useEffect(() => {
+    if (!dimmed) { exitFlicker.setValue(0); return; }
+    let cancelled = false;
+    let idx = 0;
+
+    const runCycle = () => {
+      if (cancelled) return;
+      setDimColorIdx(idx);
+      exitFlicker.setValue(0);
+      Animated.sequence([
+        Animated.timing(exitFlicker, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.delay(4000),
+        Animated.timing(exitFlicker, { toValue: 0, duration: 1000, useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (!finished || cancelled) return;
+        setTimeout(() => {
+          if (cancelled) return;
+          idx = (idx + 1) % DIM_COLORS.length;
+          runCycle();
+        }, 6000);
+      });
+    };
+
+    runCycle();
+    return () => { cancelled = true; exitFlicker.stopAnimation(); };
+  }, [dimmed]);
 
   useEffect(() => {
     Animated.spring(slideAnim, {
@@ -90,6 +129,12 @@ export default function SessionScreen({ config, onExit }: Props) {
       if (!mounted) return;
       if (tonicQueue.current.length === 0) tonicQueue.current = shuffled12();
       const tonicMidi = tonicQueue.current.shift()!;
+
+      // Brief pause before loading the new cadence — gives Oppo's ExoPlayer time
+      // to process unloadAsync() calls from the previous round before new instances
+      // are created. Prevents gradual pool exhaustion during sustained runs.
+      await new Promise(r => setTimeout(r, 250));
+      if (!mounted) return;
 
       await engine.preloadForSession(tonicMidi, config.mode, config.volume).catch(() => {});
       if (!mounted) return;
@@ -154,9 +199,28 @@ export default function SessionScreen({ config, onExit }: Props) {
             {label}
           </Animated.Text>
         </View>
+        <TouchableOpacity style={s.dimButton} activeOpacity={0.6} onPress={() => setDimmed(true)}>
+          <Text style={s.dimText}>D I M</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={s.exitPill} activeOpacity={0.6} onPress={handleExit}>
           <Text style={s.exitText}>EXIT</Text>
         </TouchableOpacity>
+
+        {/* Dim overlay — inside SafeAreaView so EXIT lands at the exact same
+            position as in normal mode. Single TouchableOpacity is always tappable;
+            visual children are pointerEvents=none so opacity doesn't block touches. */}
+        {dimmed && (
+          <View style={s.dimOverlay}>
+            <TouchableOpacity style={s.dimmedExit} activeOpacity={0} onPress={handleExit}>
+              <Animated.View pointerEvents="none" style={[s.exitPill, s.dimmedExitVisual, {
+                opacity: exitFlicker,
+                borderColor: DIM_COLORS[dimColorIdx],
+              }]}>
+                <Text style={[s.exitText, { color: DIM_COLORS[dimColorIdx] }]}>EXIT</Text>
+              </Animated.View>
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
     </Animated.View>
   );
@@ -212,5 +276,34 @@ const s = StyleSheet.create({
     fontWeight: '300',
     letterSpacing: 7,
     paddingLeft: 7,
+  },
+  dimButton: {
+    width: 240,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  dimText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '300',
+    letterSpacing: 7,
+    paddingLeft: 7,
+  },
+  dimOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  dimmedExit: {
+    marginBottom: 64,
+  },
+  dimmedExitVisual: {
+    marginBottom: 0,
   },
 });

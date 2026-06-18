@@ -629,6 +629,19 @@ const AUDIO_ASSETS: Record<string, number> = {
 // Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
 // Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
 // Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
+// Rebuild: scripts/chop_vocoder.py  (solfège)  |  generate_piano.py  |  generate_ride.py
   'cadence_57_ionian': require('../assets/audio/cadence_57_ionian.mp3'),
   'cadence_58_ionian': require('../assets/audio/cadence_58_ionian.mp3'),
   'cadence_59_ionian': require('../assets/audio/cadence_59_ionian.mp3'),

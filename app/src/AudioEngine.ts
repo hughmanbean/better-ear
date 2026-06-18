@@ -29,9 +29,9 @@ export interface SessionConfig {
 }
 
 // Volumes at each user level, relative to the fixed ride (0.22).
-// Solfege samples are normalized to 0.90 peak; piano files to 0.50 peak,
+// Solfege samples are normalized to 0.80 peak; piano files to 0.50 peak,
 // so PIANO_VOLUMES is set ~25% higher to balance perceived loudness.
-const NOTE_VOLUMES    = [0.15, 0.30, 0.50] as const;  // solfège
+const NOTE_VOLUMES    = [0.096, 0.192, 0.32] as const;  // solfège
 const PIANO_VOLUMES   = [0.32, 0.62, 1.00] as const;  // mystery piano notes
 const CADENCE_VOLUMES = [0.22, 0.42, 0.66] as const;  // I–IV–V–I cadence
 
@@ -42,10 +42,11 @@ const MIN_GAP_BEATS = 1;
 // Start loading each note this many beats before it plays. 1 beat = 750 ms —
 // keeps the ExoPlayer instance fresh enough that Oppo won't silently reclaim it.
 const PRELOAD_LEAD_BEATS = 1;
-// Unload note sounds 2 s after playback starts (samples are ~1 s).
-const NOTE_UNLOAD_MS = 2000;
-// Cadence is 4 beats = 3000 ms; unload well after it finishes.
-const CADENCE_UNLOAD_MS = 5000;
+// Unload note sounds after playback. Clips are 1750 ms; 1800 ms gives 50 ms margin.
+// Keeping this tight reduces simultaneous ExoPlayer instances on Oppo.
+const NOTE_UNLOAD_MS = 1800;
+// Cadence is 4 beats = 3000 ms; 3500 ms gives 500 ms margin and frees the instance sooner.
+const CADENCE_UNLOAD_MS = 3500;
 // If playAsync() hasn't resolved or rejected within this window, treat it as
 // hung (Oppo/ExoPlayer silent freeze) and immediately start a fallback sound.
 // Must be well under one beat (750 ms) so the fallback lands in time.
@@ -55,7 +56,7 @@ export const PLAY_TIMEOUT_MS = 300;
 // so the perceived peak aligns with the click.
 // chop_vocoder.py normalises onset position within each clip so all syllables
 // have their energy landing at the same position relative to the clip start.
-const SOLFEGE_LEAD_MS = 100;
+const SOLFEGE_LEAD_MS = 550;
 
 export type SessionEvent =
   | { type: 'cadence' }
@@ -246,10 +247,25 @@ export class AudioEngine {
     const sound = this.cadenceSound;
     this.cadenceSound = null;
     if (!sound) return;
-    setTimeout(() => { sound.unloadAsync().catch(() => {}); }, CADENCE_UNLOAD_MS);
-    sound.playAsync().catch(() => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       sound.unloadAsync().catch(() => {});
-    });
+    }, CADENCE_UNLOAD_MS);
+    sound.playAsync()
+      .then(() => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        setTimeout(() => { sound.unloadAsync().catch(() => {}); }, CADENCE_UNLOAD_MS);
+      })
+      .catch(() => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        sound.unloadAsync().catch(() => {});
+      });
   }
 
   /**
@@ -383,8 +399,8 @@ export class AudioEngine {
       await onBeat(b, SOLFEGE_LEAD_MS); if (halted()) return;
       const midi     = mysteryMidis[i];
       const syllable = getSyllable(midi, tonicMidi, direction, mode);
-      onEvent?.({ type: 'syllable', syllable, midi, phase: 'verification' });
       this.playSolfegeNote(midi, syllable);
+      setTimeout(() => { if (!this.stopped) onEvent?.({ type: 'syllable', syllable, midi, phase: 'verification' }); }, SOLFEGE_LEAD_MS);
       b++;
     }
 
@@ -392,8 +408,8 @@ export class AudioEngine {
     for (let i = 0; i < path.length; i++) {
       const { midi, syllable } = path[i];
       await onBeat(b, SOLFEGE_LEAD_MS); if (halted()) return;
-      onEvent?.({ type: 'syllable', syllable, midi, phase: i === 0 ? 'verification' : 'path' });
       this.playSolfegeNote(midi, syllable);
+      setTimeout(() => { if (!this.stopped) onEvent?.({ type: 'syllable', syllable, midi, phase: i === 0 ? 'verification' : 'path' }); }, SOLFEGE_LEAD_MS);
       b++;
     }
 

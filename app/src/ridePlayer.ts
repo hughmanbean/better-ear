@@ -6,6 +6,10 @@ const CLICK_ASSET = require('../assets/audio/metro_click.wav');
 
 // 80 BPM — must match BEAT_MS in AudioEngine.ts
 const BEAT_MS = 750;
+// WAV click has near-zero codec latency; MP3 notes have ~20 ms ExoPlayer startup
+// overhead even when pre-prepared. Delay the click by this amount so it lines up
+// with the actual audio output of the MP3 sounds. Tune by ear if needed.
+const CLICK_DELAY_MS = 20;
 
 let rideT0:     number  = 0;
 let rideN:      number  = 0;
@@ -80,7 +84,7 @@ function scheduleNext(): void {
   const delay    = Math.max(0, expected - Date.now());
   beatTimer = setTimeout(() => {
     if (!rideRunning) return;
-    fireClick();
+    setTimeout(fireClick, CLICK_DELAY_MS);
     scheduleNext();
   }, delay);
 }
@@ -103,7 +107,7 @@ export function syncRide(): void {
   rideT0      = Date.now();
   rideN       = 0;
   rideRunning = true;
-  fireClick();
+  setTimeout(fireClick, CLICK_DELAY_MS);
   scheduleNext();
 }
 

@@ -34,8 +34,11 @@ export function playTick(): void {
       .catch(() => { s.unloadAsync().catch(() => {}); });
   } else {
     // fallback if prefetch hadn't resolved yet
-    Audio.Sound.createAsync(TICK_ASSET, { volume: 0.06, shouldPlay: true })
-      .then(({ sound }) => { setTimeout(() => sound.unloadAsync().catch(() => {}), 1000); })
+    Audio.Sound.createAsync(TICK_ASSET, { volume: 0.06 })
+      .then(({ sound }) => {
+        setTimeout(() => { sound.unloadAsync().catch(() => {}); }, 1000);
+        sound.playAsync().catch(() => {});
+      })
       .catch(() => {});
   }
 }
